@@ -34,4 +34,5 @@ class ReportData:
     flag_summary: dict[str, int] = field(default_factory=dict)   # flag → count
     source_summary: dict[str, int] = field(default_factory=dict) # source → event count
     behavioral_summary: Optional[BehavioralSummary] = None       # Aggregated behavioral stats
+    behavior_analytics: dict = field(default_factory=dict)       # Advanced structural analytics
     stats: dict = field(default_factory=dict)                    # engine stats

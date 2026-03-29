@@ -107,6 +107,7 @@ class HtmlRenderer:
 
 <div class="container">
   {self._device_card(d)}
+  {self._analytics_dashboard_section(d)}
   {self._behavioral_profile_section(d)}
   {self._summary_cards(d)}
   {self._flag_summary_section(d)}
@@ -142,6 +143,80 @@ class HtmlRenderer:
 <section class="card">
   <h2>📱 Device Information</h2>
   <table class="prop-table">{rows_html}</table>
+</section>"""
+
+    def _analytics_dashboard_section(self, d: ReportData) -> str:
+        if not d.behavior_analytics:
+            return ""
+        
+        analytics = d.behavior_analytics
+        heatmap = analytics.get("heatmap", {})
+        anomalies = analytics.get("anomalies", [])
+        profiles = analytics.get("app_profiles", {})
+        
+        # 1. Build Heatmap HTML
+        max_val = max(heatmap.values()) if heatmap and max(heatmap.values()) > 0 else 1
+        heatmap_html = ""
+        for h in range(24):
+            val = heatmap.get(h, 0)
+            h_pct = (val / max_val) * 100
+            active_cls = "active" if val > 0 else ""
+            heatmap_html += f'<div class="heatmap-bar {active_cls}" style="height:{h_pct}%" data-hour="{h:02d}" title="{val} events at {h:02d}:00"></div>'
+
+        # 2. Build Anomaly List HTML
+        if not anomalies:
+            anomalies_html = '<p class="muted">No behavioral anomalies detected.</p>'
+        else:
+            anomalies_rows = ""
+            for msg in anomalies:
+                anomalies_rows += f'<tr><td><span class="anomaly-tag">⚠️</span> {html.escape(msg)}</td></tr>'
+            anomalies_html = f'<table class="anomaly-table">{anomalies_rows}</table>'
+
+        # 3. Build Top Profiles HTML (Top 10)
+        sorted_profiles = sorted(profiles.items(), key=lambda x: x[1].get("total_time", 0), reverse=True)[:10]
+        profile_rows = ""
+        for app, stats in sorted_profiles:
+            risk = stats.get("risk", "UNKNOWN")
+            risk_cls = "sev-normal" if "SYSTEM" in risk or "KNOWN" in risk else "sev-suspicious"
+            profile_rows += f"""
+<tr>
+  <td class="mono">{html.escape(app)}</td>
+  <td><span class="sev-badge {risk_cls}">{risk}</span></td>
+  <td class="text-right"><code>{_format_duration(stats.get('total_time', 0))}</code></td>
+  <td class="text-right"><code>{stats.get('sessions', 0)}</code></td>
+</tr>"""
+
+        return f"""
+<section class="card analytics-dashboard">
+  <h2>📊 Advanced Behavior Analytics Dashboard</h2>
+  <div class="analytics-grid">
+    <div class="analytics-left">
+      <h3>Hourly Usage Distribution (Heatmap)</h3>
+      <div class="heatmap-container">{heatmap_html}</div>
+      <p class="muted" style="margin-top: 30px; font-size: 11px;">
+        Forensic Note: Distribution targets user-initiated interactions (APP_OPENED / APP_SESSION).
+      </p>
+    </div>
+    <div class="analytics-right">
+      <h3>Behavioral Anomaly Summary</h3>
+      {anomalies_html}
+    </div>
+  </div>
+  
+  <div class="profile-summary-section" style="margin-top: 24px; border-top: 1px solid var(--border); padding-top: 20px;">
+    <h3>Top Application Usage Profiles</h3>
+    <table class="data-table" style="margin-top: 12px;">
+      <thead>
+        <tr>
+          <th>Application Package</th>
+          <th>Risk Class</th>
+          <th class="text-right">Total Duration</th>
+          <th class="text-right">Sessions</th>
+        </tr>
+      </thead>
+      <tbody>{profile_rows}</tbody>
+    </table>
+  </div>
 </section>"""
 
     def _behavioral_profile_section(self, d: ReportData) -> str:
@@ -556,6 +631,18 @@ h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
   padding: 20px 0; text-align: center;
   color: var(--muted); font-size: 12px; margin-top: 8px;
 }
+
+/* Analytics Dashboard Styles */
+.analytics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+.heatmap-container { display: flex; align-items: flex-end; gap: 4px; height: 120px; padding-top: 20px; }
+.heatmap-bar { flex: 1; background: var(--accent); border-radius: 2px 2px 0 0; position: relative; min-width: 12px; }
+.heatmap-bar:hover { background: var(--purple); }
+.heatmap-bar::after { content: attr(data-hour); position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: 9px; color: var(--muted); }
+.heatmap-bar.active { background: var(--orange); }
+
+.anomaly-table { width: 100%; font-size: 12px; border-collapse: collapse; }
+.anomaly-table td { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.anomaly-tag { color: var(--red); font-weight: 600; margin-right: 8px; }
 """
 
 _JS = """

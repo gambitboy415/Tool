@@ -25,9 +25,10 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Literal, Optional
 
-from config.settings import REPORT_OUTPUT_DIR
+from config.settings import REPORT_OUTPUT_DIR, SAFE_PREFIXES
 from core.reporting.html_renderer import HtmlRenderer
 from core.analysis.behavioral_summary import get_behavioral_summary
+from core.analytics.behavior_engine import BehaviorEngine
 from models.report_data import ReportData
 from models.device_info import DeviceInfo
 from models.timeline_event import TimelineEvent
@@ -165,6 +166,7 @@ class ReportGenerator:
             flag_summary=flag_summary,
             source_summary=source_summary,
             behavioral_summary=get_behavioral_summary(timeline) if include_behavioral else None,
+            behavior_analytics=BehaviorEngine(timeline).generate_full_report() if include_behavioral else {},
             stats=stats,
         )
 
@@ -193,6 +195,7 @@ class ReportGenerator:
                 "suspicious_apps":   data.suspicious_apps,
                 "flag_summary":      data.flag_summary,
                 "source_summary":    data.source_summary,
+                "analytics":         data.behavior_analytics,
             },
             "timeline": [e.to_dict() for e in data.timeline],
             "flagged":  [e.to_dict() for e in data.flagged_events],

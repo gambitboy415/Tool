@@ -536,9 +536,9 @@ class EventNormalizer:
                 continue
 
             # Phase 3: Strict Whitelist - drop DIRECT events not in allowed list
-            # if event.event_type not in _HIGH_VALUE_EVENT_TYPES and event.evidence_type == "DIRECT":
-            #     stats["noise_removed"] += 1
-            #     continue
+            if event.event_type not in _HIGH_VALUE_EVENT_TYPES and event.evidence_type == "DIRECT":
+                stats["noise_removed"] += 1
+                continue
 
             # Phase 4/5: Filter by SAFE_PREFIXES (Ignore system/vendor apps)
             # Exception: Usage sessions (APP_OPENED/SESSION) or Correlated events are kept.

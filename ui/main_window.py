@@ -56,6 +56,7 @@ from core.timeline.session_engine import build_sessions
 from core.correlation.correlation_engine import CorrelationEngine, CorrelationReport
 from core.inference.inference_engine import InferenceEngine, InferenceReport
 from core.analysis.behavioral_summary import get_behavioral_summary, BehavioralSummary
+from core.analytics.behavior_engine import BehaviorEngine
 from core.reporting.report_generator import ReportGenerator
 
 from models.device_info import DeviceInfo
@@ -67,6 +68,7 @@ from ui.timeline_view import TimelineView
 from ui.analysis_panel import AnalysisPanel
 from ui.progress_dialog import ProgressDialog
 from ui.report_dialog import ReportDialog
+from ui.timeline_fix import patch_timeline
 
 from utils.logger import get_logger
 
@@ -242,11 +244,15 @@ class MainWindow(QMainWindow):
         self._inf_report:   Optional[InferenceReport]   = None
         self._corr_report:  Optional[CorrelationReport]  = None
         self._behavior_sum: Optional[BehavioralSummary]  = None
+        self._behavior_engine: Optional[BehaviorEngine] = None
 
         self._setup_window()
         self._build_ui()
         self._apply_stylesheet()
         self._connect_signals()
+
+        # Apply UI sort patch for forensic chronological integrity
+        patch_timeline(self._timeline_view)
 
         log.info("MainWindow initialised")
 
@@ -393,13 +399,18 @@ class MainWindow(QMainWindow):
         self._corr_report  = corr_report
         self._behavior_sum = behavioral_summary
 
+        # Phase 10: Advanced Behavior Analytics Engine Integration
+        self._behavior_engine = BehaviorEngine(timeline)
+        log.info("Advanced Behavior Analytics Engine initialised.")
+
         # Update all panels
         self._timeline_view.load_timeline(timeline)
         self._analysis_panel.update_analysis(
-            timeline,
+            timeline=timeline,
             inference_report=inf_report,
             correlation_report=corr_report,
             behavioral_summary=behavioral_summary,
+            behavior_analytics=self._behavior_engine.generate_full_report() if self._behavior_engine else None
         )
         self._event_count_label.setText(f"{len(timeline):,} events")
         self._export_action.setEnabled(True)

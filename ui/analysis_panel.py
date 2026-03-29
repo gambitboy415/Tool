@@ -65,11 +65,10 @@ _FLAG_SEVERITY: dict[str, str] = {     # flag → colour hex
     "TEMPORAL_INTEGRITY_INVALID": "#ef4444", # Red
     "SUSPICIOUS":               "#ef4444", # Red
     "HEAVY_USAGE":              "#f97316", # Orange
-    "APP_LIFECYCLE":            "#22c55e", # Green (Positive match)
+    "APP_LIFECYCLE":            "#22c55e", # Green
     "DORMANT_APP":              "#8892a4", # Gray
     "LIFECYCLE_CORRELATED":     "#6366f1", # Indigo
     "SUSPICIOUS_REMOVAL":       "#ef4444", # Red
-    "DORMANT_APP":              "#8892a4", # Muted
     "LATE_NIGHT_ACTIVITY":      "#f97316", # Orange
     "IMMEDIATE_APP_USE":        "#ef4444", # Red
     "COMMUNICATION_BURST":      "#3b82f6", # Blue
@@ -77,6 +76,13 @@ _FLAG_SEVERITY: dict[str, str] = {     # flag → colour hex
     "RAPID_INSTALL_UNINSTALL":  "#ef4444", # Red
     "ANTI_FORENSIC_SEQUENCE":   "#ef4444", # Red
     "FACTORY_RESET_INDICATOR":  "#ef4444", # Red
+}
+
+_RISK_COLORS: dict[str, str] = {
+    "LOW (SYSTEM)": "#22c55e", # Green
+    "LOW (KNOWN)":  "#22c55e", # Green
+    "MEDIUM":        "#f97316", # Orange
+    "HIGH":          "#ef4444", # Red
 }
 
 
@@ -212,11 +218,23 @@ class AnalysisPanel(QWidget):
         self._correlations_layout.setSpacing(4)
         scroll_layout.addWidget(self._correlations_group)
 
-        # INFERRED detections log
+        # Behavioral Anomaly Log
+        self._anomaly_group = QGroupBox("🚨 Behavioral Anomaly Log")
+        self._anomaly_layout = QVBoxLayout(self._anomaly_group)
+        self._anomaly_layout.setSpacing(4)
+        scroll_layout.addWidget(self._anomaly_group)
+
+        # Inferred Detections Log
         self._inferred_group = QGroupBox("🔍 Inferred Detections")
         self._inferred_layout = QVBoxLayout(self._inferred_group)
         self._inferred_layout.setSpacing(4)
         scroll_layout.addWidget(self._inferred_group)
+
+        # Usage Heatmap
+        self._heatmap_group = QGroupBox("📊 Hourly Usage Distribution")
+        self._heatmap_layout = QVBoxLayout(self._heatmap_group)
+        self._heatmap_layout.setSpacing(4)
+        scroll_layout.addWidget(self._heatmap_group)
 
         scroll_layout.addStretch()
         scroll.setWidget(scroll_content)
@@ -279,6 +297,7 @@ class AnalysisPanel(QWidget):
         inference_report: Optional[InferenceReport] = None,
         correlation_report: Optional[CorrelationReport] = None,
         behavioral_summary: Optional[BehavioralSummary] = None,
+        behavior_analytics: Optional[dict] = None,
     ) -> None:
         """
         Populate the panel from a completed analysis session.
@@ -355,30 +374,81 @@ class AnalysisPanel(QWidget):
             
             for app, duration in behavioral_summary.top_apps_by_duration:
                 app_row = QHBoxLayout()
+                
+                # Check for risk in behavior_analytics if available
+                risk_label = ""
+                risk_color = "#8892a4"
+                if behavior_analytics and "app_profiles" in behavior_analytics:
+                    profile = behavior_analytics["app_profiles"].get(app, {})
+                    risk_label = profile.get("risk", "")
+                    risk_color = _RISK_COLORS.get(risk_label, "#8892a4")
+
                 name = QLabel(app if len(app) < 25 else app[:22]+"...")
-                name.setStyleSheet("font-size:11px; color:#e2e8f0;")
+                name.setStyleSheet("font-size:11px; color:#e2e8f0; font-weight:500;")
+                
+                if risk_label:
+                    risk_lbl = QLabel(f"({risk_label})")
+                    risk_lbl.setStyleSheet(f"font-size:9px; color:{risk_color}; font-weight:700;")
+                    app_row.addWidget(name)
+                    app_row.addWidget(risk_lbl)
+                else:
+                    app_row.addWidget(name)
                 
                 # Simple CSS bar
                 max_dur = behavioral_summary.top_apps_by_duration[0][1] or 1
                 pct = int(duration / max_dur * 100)
-                bar = QFrame()
+                bar_container = QFrame()
+                bar_container.setFixedHeight(6)
+                bar_container.setFixedWidth(80)
+                bar_container.setStyleSheet("background:#13151f; border-radius:3px;")
+                
+                bar = QFrame(bar_container)
                 bar.setFixedHeight(6)
                 bar.setFixedWidth(int(pct * 0.8)) # scaled
-                bar.setStyleSheet("background:#6366f1; border-radius:3px;")
+                bar.setStyleSheet(f"background:{risk_color}; border-radius:3px;")
                 
                 dur = QLabel(self._format_duration(duration))
-                dur.setStyleSheet("font-size:11px; color:#6366f1; font-weight:600;")
+                dur.setStyleSheet(f"font-size:11px; color:{risk_color}; font-weight:600;")
                 dur.setAlignment(Qt.AlignmentFlag.AlignRight)
                 
-                app_row.addWidget(name)
                 app_row.addStretch()
-                app_row.addWidget(bar)
+                app_row.addWidget(bar_container)
                 app_row.addWidget(dur)
                 row_widget = QWidget()
                 row_widget.setLayout(app_row)
                 self._profile_layout.addWidget(row_widget)
         else:
             self._profile_layout.addWidget(QLabel("No behavioral profile generated."))
+
+        # Advanced Behavior Analytics (Heamap & Anomalies)
+        self._clear_layout(self._heatmap_layout)
+        self._clear_layout(self._anomaly_layout)
+        
+        if behavior_analytics:
+            # Heatmap
+            heatmap = behavior_analytics.get("heatmap", {})
+            if heatmap:
+                self._add_heatmap_widget(heatmap)
+            else:
+                self._heatmap_layout.addWidget(QLabel("No usage data for heatmap."))
+
+            # Anomalies
+            anomalies = behavior_analytics.get("anomalies", [])
+            if anomalies:
+                for msg in anomalies:
+                    lbl = QLabel(f"⚠️ {msg}")
+                    lbl.setWordWrap(True)
+                    lbl.setStyleSheet("color:#ef4444; font-size:11px; font-weight:600; background:#1a1d27; border:1px solid #ef4444; border-radius:4px; padding:4px;")
+                    self._anomaly_layout.addWidget(lbl)
+            else:
+                self._anomaly_layout.addWidget(QLabel("No behavioral anomalies detected."))
+
+            # Risk Profiling Integration (Enhance current top apps if they match)
+            # Actually, let's keep it simple and just show the profiles from analytics
+            # since they already have everything.
+        else:
+            self._heatmap_layout.addWidget(QLabel("Advanced analytics not available."))
+            self._anomaly_layout.addWidget(QLabel("Advanced analytics not available."))
 
         # Flags breakdown
         self._clear_layout(self._flags_layout)
@@ -397,10 +467,17 @@ class AnalysisPanel(QWidget):
         self._clear_layout(self._apps_layout)
         if suspicious:
             for app in suspicious:
-                btn = QPushButton(f"  {app}")
+                risk_label = ""
+                risk_color = "#ef4444" # Default for suspicious
+                if behavior_analytics and "app_profiles" in behavior_analytics:
+                    profile = behavior_analytics["app_profiles"].get(app, {})
+                    risk_label = profile.get("risk", "MEDIUM")
+                    risk_color = _RISK_COLORS.get(risk_label, "#ef4444")
+
+                btn = QPushButton(f"  {app}  [{risk_label}]" if risk_label else f"  {app}")
                 btn.setStyleSheet(
-                    "text-align:left; color:#ef4444; background:#1a1d27; "
-                    "border:1px solid #2e344a; border-radius:4px; padding:4px 8px;"
+                    f"text-align:left; color:{risk_color}; background:#1a1d27; "
+                    f"border:1px solid {risk_color}33; border-radius:4px; padding:4px 8px;"
                 )
                 btn.setFixedHeight(28)
                 btn.clicked.connect(lambda _, a=app: self.app_filter_requested.emit(a))
@@ -516,8 +593,52 @@ class AnalysisPanel(QWidget):
         self._clear_layout(self._apps_layout)
         self._clear_layout(self._sessions_layout)
         self._clear_layout(self._inferred_layout)
+        self._clear_layout(self._profile_layout)
+        self._clear_layout(self._heatmap_layout)
+        self._clear_layout(self._anomaly_layout)
+        self._clear_layout(self._correlations_layout)
 
     # ── Helpers ────────────────────────────────────────────────────────────────
+
+    def _add_heatmap_widget(self, heatmap: dict[int, int]) -> None:
+        """Render a compact horizontal bar chart of the usage distribution."""
+        container = QWidget()
+        h_layout = QHBoxLayout(container)
+        h_layout.setContentsMargins(0, 4, 0, 4)
+        h_layout.setSpacing(2)
+        
+        max_val = max(heatmap.values()) if heatmap and max(heatmap.values()) > 0 else 1
+        
+        for hour in range(24):
+            val = heatmap.get(hour, 0)
+            bar = QFrame()
+            bar.setFixedWidth(7)
+            
+            # Map height (2-60px)
+            h = int((val / max_val) * 60) if val > 0 else 2
+            bar.setFixedHeight(h)
+            
+            # Color gradient: Muted for inactive, vibrant for active
+            color = "#a855f7" if val > (max_val * 0.7) else "#6366f1"
+            if val == 0: color = "#2e344a"
+            
+            bar.setStyleSheet(f"background:{color}; border-radius:2px;")
+            bar.setToolTip(f"{hour:02d}:00 | {val} events")
+            
+            # Align bottom
+            v_box = QVBoxLayout()
+            v_box.setContentsMargins(0, 0, 0, 0)
+            v_box.setSpacing(0)
+            v_box.addStretch()
+            v_box.addWidget(bar)
+            h_layout.addLayout(v_box)
+            
+        self._heatmap_layout.addWidget(container)
+        
+        legend = QLabel("Distribution: 00:00 — 23:00 (UTC) | ⬆ Peaks in Violet")
+        legend.setStyleSheet("font-size:9px; color:#8892a4; font-weight:600;")
+        legend.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._heatmap_layout.addWidget(legend)
 
     def _add_flag_row(self, flag: str, count: int) -> None:
         label = _FLAG_LABELS.get(flag, flag.replace("_", " ").title())
