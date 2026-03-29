@@ -1,0 +1,11 @@
+{
+  "pythonVersion": "3.11",
+  "pythonPlatform": "Windows",
+  "include": ["."],
+  "exclude": ["assets", "logs", "reports"],
+  "typeCheckingMode": "basic",
+  "useLibraryCodeForTypes": true,
+  "reportMissingImports": "warning",
+  "reportMissingModuleSource": "none",
+  "extraPaths": ["e:/Timeline Tool"]
+}
