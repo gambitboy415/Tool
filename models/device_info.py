@@ -34,6 +34,11 @@ class DeviceInfo:
     connected_at: datetime
     transport_type: str = "usb"
 
+    # --- Forensic Clock Metadata ---
+    device_time_utc: datetime = field(default_factory=lambda: datetime.now())
+    timezone_offset_sec: int = 0
+    host_drift_ms: int = 0
+
     def display_name(self) -> str:
         """Returns a human-readable label, e.g. 'Google Pixel 6 (Android 13)'."""
         return f"{self.manufacturer} {self.model} (Android {self.android_version})"

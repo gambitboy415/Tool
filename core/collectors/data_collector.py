@@ -108,6 +108,21 @@ class DataCollector:
     ) -> None:
         self._connector = connector
         self._max_workers = max_workers
+        self._device_info: Optional[DeviceInfo] = None
+
+    def _get_clock_metadata(self) -> dict:
+        """Fetch the latest clock sync snapshot from the connector's device info."""
+        if not self._device_info:
+            try:
+                self._device_info = self._connector.get_device_info()
+            except Exception:
+                return {}
+        
+        return {
+            "device_time_utc":     self._device_info.device_time_utc.isoformat(),
+            "timezone_offset_sec": self._device_info.timezone_offset_sec,
+            "host_drift_ms":       self._device_info.host_drift_ms,
+        }
 
     # ── Public: individual sources ────────────────────────────────────────────
 
@@ -167,7 +182,7 @@ class DataCollector:
         """
         log.info("Collecting uninstalled/retained package list …")
         return self._safe_shell(
-            command="pm list packages -u -U --user 0",
+            command="pm list packages -f -u -U --user 0",
             artifact_type=ArtifactType.APP_LIST,
             description="Uninstalled packages with retained data and UIDs",
             metadata={"scope": "uninstalled"},
@@ -409,7 +424,14 @@ class DataCollector:
             :class:`RawArtifact` — always; ``error`` field set on failure.
         """
         collected_at = datetime.now(tz=timezone.utc)
-        full_metadata = {"description": description, **(metadata or {})}
+        
+        # Attach forensic clock sync snapshot to every artifact
+        clock_sync = self._get_clock_metadata()
+        full_metadata = {
+            "description": description, 
+            "clock_sync": clock_sync,
+            **(metadata or {})
+        }
         error: Optional[str] = None
         raw_output = ""
 

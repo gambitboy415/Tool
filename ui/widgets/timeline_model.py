@@ -33,7 +33,7 @@ from PyQt6.QtGui import QColor, QFont, QBrush
 from models.timeline_event import TimelineEvent
 
 # ── Column metadata ───────────────────────────────────────────────────────────
-_COLUMNS = ["#", "Timestamp (UTC)", "Evidence", "App / Package",
+_COLUMNS = ["#", "Timestamp (IST)", "Evidence", "App / Package",
             "Event Type", "Source", "Description", "Flags"]
 
 # Evidence type → hex colour for the badge cell background
@@ -173,7 +173,7 @@ class TimelineTableModel(QAbstractTableModel):
     def _display(event: TimelineEvent, col: int) -> str:
         match col:
             case 0: return str(event.sequence_index)
-            case 1: return event.iso_timestamp
+            case 1: return event.iso_timestamp_ist
             case 2: return event.evidence_type
             case 3: return event.app
             case 4:
@@ -190,7 +190,8 @@ class TimelineTableModel(QAbstractTableModel):
         lines = [
             f"Event ID: {event.event_id}",
             f"Sequence: #{event.sequence_index}",
-            f"Timestamp: {event.iso_timestamp}",
+            f"Timestamp (IST): {event.iso_timestamp_ist}",
+            f"Timestamp (UTC): {event.iso_timestamp}",
             f"App: {event.app}",
             f"Type: {event.event_type}",
             f"Source: {event.source}",

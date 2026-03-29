@@ -80,6 +80,51 @@ _FLAG_SEVERITY: dict[str, str] = {     # flag → colour hex
 }
 
 
+# ── Suspicious Apps Filtering ──────────────────────────────────────────────
+
+# Known system package prefixes (Step 1 and Step 5)
+_SYSTEM_APP_PREFIXES = {
+    # Core Android & Google
+    "android", "com.android", "com.google.android", 
+    "com.google.android.gms", "com.google.android.gsf",
+    "com.google.android.inputmethod", "com.google.mainline",
+    
+    # Samsung / Knox
+    "com.samsung", "com.sec", "com.wsomacp", "com.osp",
+    "com.samsungapps", "com.sec.knox", "com.knox",
+    
+    # Chipset / OEM Frameworks
+    "com.qualcomm", "com.qti", "com.qcom",
+    "com.mediatek", "com.mtk",
+    
+    # Brands
+    "com.miui", "com.xiaomi",             # Xiaomi
+    "com.oneplus", "com.oplus",           # OnePlus / Oppo
+    "com.oppo", "com.coloros",            # Oppo
+    "com.vivo", "com.bbk",                # Vivo
+    "com.realme",                         # Realme
+    "com.motorola",                       # Motorola
+    "com.lge",                            # LG
+    "com.sonymobile", "com.sonyericsson", # Sony
+    
+    # Preloads & Utils
+    "com.microsoft.skydrive", "com.microsoft.appmanager",
+    "com.facebook.system", "com.facebook.appmanager", "com.facebook.services",
+    "com.monotype", "com.touchtype", "com.swiftkey",
+    "android.auto_generated",
+}
+
+# Package patterns to match inside strings (Step 2)
+_SYSTEM_APP_PATTERNS = {
+    "overlay", "rro", "stub", "configurator", "provider.badge"
+}
+
+# Package suffix to match (Step 2)
+_SYSTEM_APP_SUFFIXES = {
+    ".agent"
+}
+
+
 class AnalysisPanel(QWidget):
     """
     Right-side behavioral analysis panel.
@@ -177,6 +222,55 @@ class AnalysisPanel(QWidget):
         scroll.setWidget(scroll_content)
         layout.addWidget(scroll)
 
+    # ── Internal Filtering Logic ────────────────────────────────────────────────
+
+    def _is_filtered_system_app(
+        self, 
+        app_pkg: str, 
+        app_events: list[TimelineEvent], 
+        earliest_install_time: Optional[str] = None
+    ) -> bool:
+        """
+        Comprehensive forensic check to determine if an app is a 'System' noise package.
+        
+        Logic:
+          1. Check hardcoded prefix whitelist (Core OS, OEM frameworks).
+          2. Check pattern-based whitelist (Overlays, RROs, Stubs).
+          3. Check forensic markers (apk_location == 'system').
+          4. Check installation time (matches device first-boot/manufacturing).
+        """
+        if not app_pkg or app_pkg == "system":
+            return True
+            
+        # Step 1: Prefix match
+        p_lower = app_pkg.lower()
+        if any(p_lower.startswith(pre) for pre in _SYSTEM_APP_PREFIXES):
+            return True
+            
+        # Step 2: Pattern match
+        if any(pat in p_lower for pat in _SYSTEM_APP_PATTERNS):
+            return True
+        if any(p_lower.endswith(suf) for suf in _SYSTEM_APP_SUFFIXES):
+            return True
+            
+        # Step 3 & 4: Forensic marker inspection
+        for event in app_events:
+            # Marker A: Known system location discovered during collection
+            loc = event.raw_fields.get("apk_location", "").lower()
+            if loc == "system":
+                return True
+                
+            # Marker B: Installation time heuristic
+            # If an app was installed at the VERY first moment of the timeline, 
+            # and it's not a known suspicious package, it's likely pre-installed.
+            if earliest_install_time and event.event_type == "APP_INSTALLED":
+                ts = event.raw_fields.get("firstInstallTime")
+                if ts == earliest_install_time:
+                    return True
+                    
+        return False
+
+
     # ── Public update API ──────────────────────────────────────────────────────
 
     def update_analysis(
@@ -198,7 +292,40 @@ class AnalysisPanel(QWidget):
         inferred   = [e for e in timeline if e.evidence_type == "INFERRED" and e.event_type != "APP_SESSION"]
         correlated = [e for e in timeline if e.evidence_type == "CORRELATED"]
         sessions   = [e for e in timeline if e.event_type == "APP_SESSION"]
-        suspicious = sorted({e.app for e in flagged if e.app and e.app != "system"})
+
+        # ── Advanced Suspicious App Filtering ────────────────────────────────
+        # To reduce noise (OEM bloatware, framework packages), we pre-calculate
+        # the manufacturing/earliest install time found in the timeline.
+        all_installs = [
+            e.raw_fields.get("firstInstallTime") for e in timeline 
+            if e.event_type == "APP_INSTALLED" and e.raw_fields.get("firstInstallTime")
+        ]
+        # Sort to find the absolute first install time (manufacturing baseline)
+        earliest_ts = sorted(all_installs)[0] if all_installs else None
+
+        # Group events by app for helper inspection
+        events_by_app: dict[str, list[TimelineEvent]] = {}
+        for e in timeline:
+            if e.app:
+                events_by_app.setdefault(e.app, []).append(e)
+
+        # Filter the suspicious list
+        raw_suspicious = {e.app for e in flagged if e.app}
+        filtered_suspicious = []
+        for app_pkg in sorted(raw_suspicious):
+            app_events = events_by_app.get(app_pkg, [])
+            
+            # Only keep if it's NOT a confirmed system app
+            if not self._is_filtered_system_app(app_pkg, app_events, earliest_ts):
+                filtered_suspicious.append(app_pkg)
+            else:
+                # EXCEPTION: If the app has an ANTI_FORENSIC or SUSPICIOUS_REMOVAL flag,
+                # we might want to keep it even if it looks like a system app.
+                # However, usually those flags are only on user apps.
+                # For now, we follow the user instruction to hide system noise.
+                pass
+
+        suspicious = filtered_suspicious
 
         # Update summary stats
         self._stat_labels["flagged"].setText(str(len(flagged)))

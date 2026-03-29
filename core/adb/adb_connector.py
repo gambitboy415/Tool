@@ -251,7 +251,6 @@ class AdbConnector:
         gracefully (a missing prop returns an empty string, not an exception).
         """
         self._require_connection()
-        log.debug("Fetching device properties …")
 
         def prop(key: str, fallback: str = "unknown") -> str:
             try:
@@ -262,6 +261,41 @@ class AdbConnector:
         sdk_raw = prop("ro.build.version.sdk", "0")
         sdk = int(sdk_raw) if sdk_raw.isdigit() else 0
 
+        # --- Forensic Clock Sync ---
+        # Fetch device epoch and timezone offset for timeline alignment
+        try:
+            # Command returns "epoch_sec\n+timezone_offset"
+            # Example: "1672567200\n+0530"
+            sync_raw = self.shell("date +%s; date +%z").strip()
+            # Capture host time at the exact moment of sync
+            host_now = datetime.now(tz=timezone.utc)
+            
+            parts = sync_raw.splitlines()
+            device_epoch = int(parts[0]) if parts and parts[0].isdigit() else int(host_now.timestamp())
+            tz_offset_raw = parts[1] if len(parts) > 1 else "+0000"
+            
+            # Convert offset "+0530" to seconds
+            # Sign is important (+/-)
+            sign = 1 if tz_offset_raw.startswith("+") else -1
+            offset_digits = re.sub(r"\D", "", tz_offset_raw)
+            if len(offset_digits) == 4:
+                hrs = int(offset_digits[:2])
+                mins = int(offset_digits[2:])
+                offset_sec = sign * (hrs * 3600 + mins * 60)
+            else:
+                offset_sec = 0
+                
+            device_time_utc = datetime.fromtimestamp(device_epoch, tz=timezone.utc)
+            drift_ms = int((host_now - device_time_utc).total_seconds() * 1000)
+            
+            log.info("Clock Sync: Device=%s, Offset=%ds, Drift=%dms", 
+                     device_time_utc.isoformat(), offset_sec, drift_ms)
+        except (AdbError, ValueError, IndexError) as exc:
+            log.warning("Clock sync failed: %s. Using host time fallback.", exc)
+            device_time_utc = datetime.now(tz=timezone.utc)
+            offset_sec = 0
+            drift_ms = 0
+
         info = DeviceInfo(
             serial=self._serial,
             model=prop("ro.product.model"),
@@ -271,6 +305,9 @@ class AdbConnector:
             build_fingerprint=prop("ro.build.fingerprint"),
             connected_at=datetime.now(tz=timezone.utc),
             transport_type=_infer_transport(self._serial),
+            device_time_utc=device_time_utc,
+            timezone_offset_sec=offset_sec,
+            host_drift_ms=drift_ms,
         )
         log.debug("DeviceInfo: %s", info)
         return info

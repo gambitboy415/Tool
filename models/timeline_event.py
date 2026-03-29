@@ -22,7 +22,7 @@ Forensic note:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional, List
 import uuid
 
@@ -123,6 +123,15 @@ class TimelineEvent:
     dedup_key: str = ""
 
     # ── Helpers ───────────────────────────────────────────────────────────────
+
+    @property
+    def iso_timestamp_ist(self) -> str:
+        """Returns the timestamp formatted in Indian Standard Time (UTC+05:30)."""
+        if self.timestamp is None:
+            return "UNKNOWN"
+        # IST is UTC+05:30
+        ist_time = self.timestamp.astimezone(timezone(timedelta(hours=5, minutes=30)))
+        return ist_time.strftime("%Y-%m-%d %H:%M:%S")
 
     def add_flag(self, flag: str) -> None:
         """Append a behavioral flag if not already present."""

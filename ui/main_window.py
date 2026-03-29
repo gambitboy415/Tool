@@ -424,7 +424,7 @@ class MainWindow(QMainWindow):
     @pyqtSlot(object)
     def _on_event_selected(self, event: TimelineEvent) -> None:
         self._status_bar.showMessage(
-            f"#{event.sequence_index}  {event.iso_timestamp}  |  "
+            f"#{event.sequence_index}  {event.iso_timestamp_ist} (IST)  |  "
             f"{event.event_type}  |  {event.app}"
         )
 

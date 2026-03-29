@@ -546,7 +546,7 @@ class EventNormalizer:
                 # Exception: High value behavioral events are kept even for system apps
                 if event.event_type in ("APP_OPENED", "APP_CLOSED", "APP_SESSION", "USER_INTERACTION", 
                                         "SCREEN_ON", "SCREEN_OFF", "DEVICE_STARTUP", "DEVICE_SHUTDOWN", 
-                                        "ACTIVITY_GAP", "CORRELATED", "FLAGGED", "INFERRED"):
+                                        "APP_UNINSTALLED", "ACTIVITY_GAP", "CORRELATED", "FLAGGED", "INFERRED"):
                     pass
                 else:
                     stats["noise_removed"] += 1

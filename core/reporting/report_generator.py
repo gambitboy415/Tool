@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -40,6 +40,7 @@ ReportFormat = Literal["html", "json"]
 
 
 # (ReportData class was moved to models.report_data.py to resolve circular imports)
+_IST = timezone(timedelta(hours=5, minutes=30))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -153,8 +154,8 @@ class ReportGenerator:
 
         return ReportData(
             device=self._device,
-            collection_time=self._collection_time,
-            report_time=datetime.now(tz=timezone.utc),
+            collection_time=self._collection_time.astimezone(_IST),
+            report_time=datetime.now(tz=_IST),
             tool_version=_TOOL_VERSION,
             timeline=denoised_timeline,
             flagged_events=flagged,

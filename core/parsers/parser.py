@@ -159,6 +159,11 @@ def _parse_timestamp(raw: str, fallback: Optional[datetime] = None) -> tuple[dat
         Tuple of (datetime, approximate: bool).
         approximate=True if the fallback was used or the timestamp was rejected.
     """
+def _parse_timestamp(
+    raw: str, 
+    fallback: Optional[datetime], 
+    clock_sync: Optional[dict] = None
+) -> tuple[Optional[datetime], bool]:
     raw = str(raw).strip().strip('"').strip("'").lower()
 
     # Handle explicit null/zero strings often found in corrupted ADB dumps
@@ -188,9 +193,17 @@ def _parse_timestamp(raw: str, fallback: Optional[datetime] = None) -> tuple[dat
                         # Assume UTC
                         dt = dt.replace(tzinfo=timezone.utc)
 
-            # --- Forensic Sanity Check ---
-            # We no longer clamp to Android Epoch. We pass the exact dt.
+            # --- Forensic Sanity Check & Clock Sync ---
             if dt:
+                # If the timestamp was a naive string (no TZ offset in the string itself),
+                # apply the device's known timezone offset from collection time.
+                if dt.tzinfo == timezone.utc and fmt not in ("epoch_ms", "epoch_s"):
+                    offset_sec = clock_sync.get("timezone_offset_sec", 0) if clock_sync else 0
+                    if offset_sec:
+                        # dt is currently interpreted as '10:00 UTC' when it was '10:00 Local'.
+                        # We subtract the offset to get the real UTC.
+                        dt = dt - timedelta(seconds=offset_sec)
+                
                 return dt, False
 
         except (ValueError, OverflowError, OSError):
@@ -240,7 +253,8 @@ class BaseParser(ABC):
             if not app or not event_type:
                 continue
 
-            dt, approximate = _parse_timestamp(ts_raw, fallback=artifact.collected_at)
+            clock_sync = artifact.metadata.get("clock_sync", {})
+            dt, approximate = _parse_timestamp(ts_raw, fallback=artifact.collected_at, clock_sync=clock_sync)
 
             # Resolve the 'reason' from the generator if provided in raw_fields
             reason = raw_fields.pop("_reason", "Raw extraction")
@@ -609,7 +623,7 @@ class PackageListParser(BaseParser):
         self, artifact: RawArtifact
     ) -> Iterator[tuple[str, str, str, dict]]:
         is_uninstalled = artifact.metadata.get("scope") == "uninstalled"
-        event_type = "APP_UNINSTALL_RESIDUAL" if is_uninstalled else "APP_LISTED"
+        event_type = "APP_UNINSTALLED" if is_uninstalled else "APP_LISTED"
 
         for line in artifact.raw_output.splitlines():
             line = line.strip()

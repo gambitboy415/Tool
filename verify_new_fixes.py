@@ -111,12 +111,37 @@ def test_fuzzy_parser():
     assert "APP_CLOSED" in types
     print("✓ Fuzzy parser correctly extracts events from diverse key-value formats.")
 
+def test_uninstalled_apps():
+    print("\n--- Testing Uninstalled App Extraction ---")
+    from core.parsers.parser import PackageListParser
+    from models.raw_artifact import RawArtifact, ArtifactType
+    from datetime import datetime, timezone
+    
+    parser = PackageListParser()
+    raw_content = "package:com.deleted.app uid:10999"
+    artifact = RawArtifact(
+        artifact_type=ArtifactType.APP_LIST,
+        source_command="adb shell pm list packages -f -u -U",
+        raw_output=raw_content,
+        collected_at=datetime.now(tz=timezone.utc),
+        device_serial="test_serial",
+        metadata={"scope": "uninstalled"}
+    )
+    
+    events = parser.parse(artifact)
+    print(f"  Extracted {len(events)} events from uninstalled list.")
+    assert len(events) == 1
+    assert events[0].app == "com.deleted.app"
+    assert events[0].event_type == "APP_UNINSTALLED"
+    print("✓ Uninstalled app correctly mapped to APP_UNINSTALLED.")
+
 if __name__ == "__main__":
     try:
         test_indexing_and_sorting()
         test_model_numerical_sort()
         test_event_labels()
         test_fuzzy_parser()
+        test_uninstalled_apps()
         print("\nALL VERIFICATIONS PASSED!")
     except Exception as e:
         print(f"\nVERIFICATION FAILED: {e}")
