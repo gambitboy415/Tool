@@ -340,11 +340,11 @@ class UsageStatsParser(BaseParser):
         r"\s+(?P<type>[A-Z_]{4,})",
     )
 
-    # Format E: Fuzzy Key-Value (Android 16+)
-    # Extracts pkg, type, and time in any order
-    _RE_FMT_E_PKG  = re.compile(r"(?:pkg|package|packageName)\s*[=:]\s*(?P<pkg>[a-zA-Z0-9._]+)", re.I)
-    _RE_FMT_E_TYPE = re.compile(r"(?:type|eventType)\s*[=:]\s*(?P<type>[a-zA-Z0-9_]+)", re.I)
-    _RE_FMT_E_TIME = re.compile(r"(?:time|timestamp)\s*[=:]\s*(?P<time>\d{10,13})", re.I)
+    # Format E: Fuzzy Key-Value (Android 16+ and Samsung variants)
+    # Extracts pkg, type, and time in any order with flexible keys
+    _RE_FMT_E_PKG  = re.compile(r"(?:pkg|package|packageName|pkgName)\s*[=:]\s*['\"]?(?P<pkg>[a-zA-Z0-9\._\-]+)['\"]?", re.I)
+    _RE_FMT_E_TYPE = re.compile(r"(?:type|eventType|event|rawType)\s*[=:]\s*['\"]?(?P<type>[a-zA-Z0-9_]+)['\"]?", re.I)
+    _RE_FMT_E_TIME = re.compile(r"(?:time|timestamp|ts|timeMillis)\s*[=:]\s*['\"]?(?P<time>\d{10,13}|\d{4}-\d{2}-\d{2}.{8,15})['\"]?", re.I)
 
     # Format F: Package Summary (Forensic Fallback)
     # package=com.example.app ... lastTimeUsed=1704067200123 totalTimeForeground=1234
@@ -425,21 +425,14 @@ class UsageStatsParser(BaseParser):
                             {"_reason": f"Forensic transition: Implicitly closed because {pkg} opened", "inferred": True}
                         )
                     
-                    # Avoid redundant OPEN events if already in foreground
-                    if current_foreground_app == pkg:
-                        i += 1
-                        continue
-                        
+                    # Update foreground tracker
                     current_foreground_app = pkg
                 
                 elif norm_type == "APP_CLOSED":
-                    # Only close if it was actually open to avoid negative durations
-                    if current_foreground_app != pkg:
-                        i += 1
-                        continue
-                    current_foreground_app = None
+                    if current_foreground_app == pkg:
+                        current_foreground_app = None
 
-                if norm_type in ("APP_OPENED", "APP_CLOSED"):
+                if norm_type:
                     raw_fields["_reason"] = f"Behavioral {norm_type.lower()} event from usage stats"
                     yield (time_str, pkg, norm_type, raw_fields)
 

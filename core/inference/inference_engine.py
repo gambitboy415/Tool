@@ -131,7 +131,28 @@ class InferenceEngine:
         extra_rules: Additional InferenceRule instances appended to the default set.
     """
 
-    _DEFAULT_RULES: list[type[InferenceRule]] = []
+    _DEFAULT_RULES: list[type[InferenceRule]] = [
+        # ── Behavioral Flagging Rules ─────────────────────────────
+        LateNightActivityRule,
+        ImmediateAppUseRule,
+        RapidInstallUninstallRule,
+        AppCamouflageRule,
+        SilentServiceRule,
+        CommunicationBurstRule,
+        TimestampIntegrityRule,
+
+        # ── Behavioral Synthesis (Inferred Event) Rules ───────────
+        ActivityGapRule,
+        FactoryResetIndicatorRule,
+        AntiForensicSequenceRule,
+
+        # ── Fusion Logic Rules ─────────────────────────────────────
+        AppLifecycleFusionRule,
+        SuspiciousRemovalFusionRule,
+        DormantAppFusionRule,
+        HeavyUsageFusionRule,
+        BackgroundActivityFusionRule,
+    ]
 
     def __init__(self, extra_rules: list[InferenceRule] | None = None) -> None:
         self._rules: list[InferenceRule] = [cls() for cls in self._DEFAULT_RULES]

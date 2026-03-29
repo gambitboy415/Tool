@@ -115,7 +115,7 @@ class TimelineBuilder:
         # Enforce strict sorting: UNKNOWN timestamps are pushed to the bottom
         sorted_events = sorted(self._events, key=lambda e: (e.timestamp is None, e.timestamp))
 
-        for idx, norm_event in enumerate(sorted_events):
+        for idx, norm_event in enumerate(sorted_events, start=1):
             te = _to_timeline_event(norm_event, sequence_index=idx)
             timeline.append(te)
 

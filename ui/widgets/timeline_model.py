@@ -53,6 +53,28 @@ _MUTED      = QColor("#8892a4")
 _MONO_FONT  = QFont("Cascadia Code", 9)
 _COL_EVIDENCE = 2
 
+# Event type → (emoji, human-readable label)
+_EVENT_TYPE_LABELS = {
+    "APP_INSTALLED": ("📦", "Installed"),
+    "APP_UNINSTALLED": ("🗑️", "Uninstalled"),
+    "APP_OPENED": ("🟢", "App Opened"),
+    "ACTIVITY_RESUMED": ("🟢", "App Opened"),
+    "APP_CLOSED": ("🔴", "App Closed"),
+    "ACTIVITY_PAUSED": ("🔴", "App Closed"),
+    "APP_UPDATED": ("🔄", "Updated"),
+    "SCREEN_ON": ("💡", "Screen On"),
+    "SCREEN_OFF": ("⚫", "Screen Off"),
+    "NETWORK_CONNECT": ("🌐", "Network Connected"),
+    "NETWORK_DISCONNECT": ("❌", "Network Disconnected"),
+    "USER_INTERACTION": ("🖱️", "User Interaction"),
+    "SHORTCUT_INVOCATION": ("⚡", "Shortcut Used"),
+    "KEYGUARD_SHOWN": ("🔐", "Device Locked"),
+    "KEYGUARD_HIDDEN": ("🔓", "Device Unlocked"),
+    "DEVICE_SHUTDOWN": ("🔌", "Device Shutdown"),
+    "DEVICE_STARTUP": ("🔋", "Device Startup"),
+    "USER_UNLOCKED": ("🔓", "User Unlocked"),
+}
+
 
 class TimelineTableModel(QAbstractTableModel):
     """
@@ -132,6 +154,17 @@ class TimelineTableModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.UserRole:
             return event
 
+        # Custom sort roles:
+        # Column 0: Numeric sequence index
+        if role == Qt.ItemDataRole.UserRole + 1 and col == 0:
+            return event.sequence_index
+
+        # Column 1: ISO timestamp handles UNKNOWN correctly
+        if role == Qt.ItemDataRole.UserRole + 1 and col == 1:
+            if event.iso_timestamp == "UNKNOWN":
+                return f"UNKNOWN_{event.sequence_index:010d}"
+            return event.iso_timestamp
+
         return None
 
     # ── Display text per column ───────────────────────────────────────────────
@@ -143,7 +176,10 @@ class TimelineTableModel(QAbstractTableModel):
             case 1: return event.iso_timestamp
             case 2: return event.evidence_type
             case 3: return event.app
-            case 4: return event.event_type
+            case 4:
+                # Map event_type to human-readable label with emoji
+                emoji, label = _EVENT_TYPE_LABELS.get(event.event_type, ("ℹ️", event.event_type))
+                return f"{emoji} {label}"
             case 5: return event.source
             case 6: return event.description
             case 7: return "  ".join(event.flags) if event.flags else ""

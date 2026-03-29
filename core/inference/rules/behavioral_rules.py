@@ -201,7 +201,16 @@ class LateNightActivityRule(InferenceRule):
             # Target user-initiated events only
             if event.event_type in ("APP_OPENED", "USER_INTERACTION", "APP_SESSION"):
                 hour = event.timestamp.hour
-                if settings.NIGHT_HOURS_START <= hour < settings.NIGHT_HOURS_END:
+                start = settings.NIGHT_HOURS_START
+                end = settings.NIGHT_HOURS_END
+                
+                is_night = False
+                if start <= end:
+                    is_night = start <= hour < end
+                else: # Crosses midnight (e.g. 23:00 - 05:00)
+                    is_night = hour >= start or hour < end
+
+                if is_night:
                     event.add_flag("LATE_NIGHT_ACTIVITY")
                     event.severity = "IMPORTANT"
                     event.reason = f"Late Night Activity: User interaction at {hour:02d}:00 ({event.app})."

@@ -543,7 +543,12 @@ class EventNormalizer:
             # Phase 4/5: Filter by SAFE_PREFIXES (Ignore system/vendor apps)
             # Exception: Usage sessions (APP_OPENED/SESSION) or Correlated events are kept.
             if any(event.app.startswith(p) for p in _SAFE_PREFIXES):
-                if event.event_type not in ("APP_OPENED", "APP_SESSION", "ACTIVITY_GAP", "CORRELATED"):
+                # Exception: High value behavioral events are kept even for system apps
+                if event.event_type in ("APP_OPENED", "APP_CLOSED", "APP_SESSION", "USER_INTERACTION", 
+                                        "SCREEN_ON", "SCREEN_OFF", "DEVICE_STARTUP", "DEVICE_SHUTDOWN", 
+                                        "ACTIVITY_GAP", "CORRELATED", "FLAGGED", "INFERRED"):
+                    pass
+                else:
                     stats["noise_removed"] += 1
                     continue
 

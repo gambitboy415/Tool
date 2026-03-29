@@ -37,6 +37,13 @@ class _EvidenceFilterProxy(QSortFilterProxyModel):
       - Full-text search string (any column)
       - Evidence type ("DIRECT", "CORRELATED", "INFERRED", or "" for all)
       - Flagged-only toggle
+
+    Custom sorting:
+      - For timestamp column: handles UNKNOWN timestamps by sorting them by sequence_index
+
+    Execution order:
+      - Filtering is applied FIRST (via filterAcceptsRow)
+      - Then sorting is applied (via lessThan)
     """
 
     def __init__(self, parent=None) -> None:
@@ -83,6 +90,25 @@ class _EvidenceFilterProxy(QSortFilterProxyModel):
                 return False
 
         return True
+
+    def lessThan(self, source_left, source_right) -> bool:
+        """
+        Custom sort comparator.
+        For timestamp column: use custom sort role that handles UNKNOWN timestamps correctly.
+        """
+        # Apply custom sorting to sequence index (col 0) and timestamp (col 1)
+        sort_col = self.sortColumn()
+        if sort_col in (0, 1):
+            source_model = self.sourceModel()
+            if isinstance(source_model, TimelineTableModel):
+                # Use custom sort role (UserRole + 1)
+                left_val = source_model.data(source_left, Qt.ItemDataRole.UserRole + 1)
+                right_val = source_model.data(source_right, Qt.ItemDataRole.UserRole + 1)
+                if left_val is not None and right_val is not None:
+                    return left_val < right_val
+
+        # Default behavior for other columns
+        return super().lessThan(source_left, source_right)
 
 
 class TimelineView(QWidget):
@@ -164,6 +190,9 @@ class TimelineView(QWidget):
         self._table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._table.clicked.connect(self._on_row_clicked)
         layout.addWidget(self._table)
+
+        # Default sort: Chronological Descending (Newest First)
+        self._table.sortByColumn(1, Qt.SortOrder.DescendingOrder)
 
         # Receive count updates from model
         self._model.data_changed_signal.connect(self._update_count)
