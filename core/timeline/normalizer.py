@@ -56,21 +56,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
+from config import settings
 from config.settings import DEDUP_WINDOW_SECONDS
 from models.normalized_event import NormalizedEvent
 from models.parsed_event import ParsedEvent
 from utils.logger import get_logger
 
 log = get_logger(__name__)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Constants
-# ─────────────────────────────────────────────────────────────────────────────
-
-def is_safe_app(app: str) -> bool:
-    """True if app is a system package that can be ignored for baseline noise."""
-    return any(app.startswith(p) for p in settings.SAFE_PREFIXES)
 
 # The earliest plausible Android device timestamp (for this tool's scope).
 # Android OS 1.0 launched 2008-10-22, but we enforce a stricter 2015 limit.
@@ -99,25 +91,57 @@ _NOISE_EVENT_TYPES: frozenset[str] = frozenset({
 
 # ── High-value event types: always PRESERVED regardless of source package ─────
 # These carry irreplaceable forensic signals for device state reconstruction.
-# Phase 3: Strict whitelist for final timeline events.
 _HIGH_VALUE_EVENT_TYPES: frozenset[str] = frozenset({
+    # App lifecycle — core user activity signals
     "APP_INSTALLED",
     "APP_UPDATED",
+    "APP_UNINSTALLED",
     "APP_OPENED",
+    "APP_CLOSED",
     "APP_SESSION",
+    "ACTIVITY_RESUMED",
+    "ACTIVITY_PAUSED",
+    "ACTIVITY_STOPPED",
+    "ACTIVITY_DESTROYED",
+    # Device state — critical forensic context
+    "DEVICE_STARTUP",
+    "DEVICE_SHUTDOWN",
+    "SCREEN_ON",
+    "SCREEN_OFF",
+    "KEYGUARD_SHOWN",
+    "KEYGUARD_HIDDEN",
+    "USER_UNLOCKED",
+    "USER_STOPPED",
+    "DEVICE_AWAKE",
+    "DEVICE_ASLEEP",
+    # Notifications and user interaction
+    "NOTIFICATION_SEEN",
+    "NOTIFICATION_INTERRUPTION",
+    "USER_INTERACTION",
+    "SHORTCUT_INVOCATION",
+    # Services
+    "FOREGROUND_SERVICE_START",
+    "FOREGROUND_SERVICE_STOP",
+    # Correlation / Inference outputs
     "CORRELATED",
     "ACTIVITY_GAP",
-    "SUSPICIOUS"  # Allow internally flagged events
+    "DORMANT_APP",
+    "HEAVY_USAGE",
+    "APP_LIFECYCLE",
+    # Flagged events
+    "SUSPICIOUS",
 })
 
 # ── Noise: packages whose routine activity is excluded from the timeline ───────
 # These generate continuous background events unrelated to user actions.
 # Exception: any HIGH_VALUE event type from these packages IS preserved.
-from config import settings
+# _SAFE_PREFIXES is a local alias for the central settings value used in Stage 3.
+_SAFE_PREFIXES = settings.SAFE_PREFIXES
+
 
 def is_safe_app(app: str) -> bool:
     """True if app is a system package that can be ignored for baseline noise."""
-    return any(app.startswith(p) for p in settings.SAFE_PREFIXES)
+    return any(app.startswith(p) for p in _SAFE_PREFIXES)
 
 # ── Rate-limit: collapse if same (app, event_type) appears more than N times ──
 # within a 60-second window. High-intensity bursts are collapsed to one event.
@@ -309,7 +333,9 @@ class EventNormalizer:
         report.deduped_temporal = s4_stats["deduped"]
         log.debug("Stage 4 complete: %d remaining (deduped=%d)", len(stage4), report.deduped_temporal)
 
-        # ── Stage 5: Final sort ────────────────────────────────────────────
+        # ── Stage 5: Final sort ───────────────────────────────────────────
+        # STRICT: valid timestamps first (chronological), unknown timestamps last.
+        # No secondary sort by event_type or app — purely time-based.
         final = sorted(stage4, key=lambda e: (e.timestamp is None, e.timestamp))
 
         report.output_count = len(final)

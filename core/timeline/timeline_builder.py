@@ -143,11 +143,40 @@ def build_timeline(normalized_events: list[NormalizedEvent]) -> list[TimelineEve
     """
     builder = TimelineBuilder(normalized_events)
     timeline = builder.build()
-    
-    # 🟢 STEP 2 — Apply Integrity Flagging (Mandatory)
+
+    # ── STEP 2: Apply Integrity Flagging (Mandatory) ───────────────────────────
     for event in timeline:
         _apply_integrity_flags(event)
-        
+
+    # ── PHASE 6: Post-Build Validation ────────────────────────────────────────
+    # Count invalid timestamps separately; verify monotonicity for valid events.
+    valid_events = [e for e in timeline if e.valid_time and e.timestamp is not None]
+    invalid_count = len(timeline) - len(valid_events)
+
+    if invalid_count:
+        log.info(
+            "Timeline integrity: %d event(s) have no valid timestamp "
+            "(flagged TEMPORAL_INTEGRITY_INVALID, placed at end of timeline)",
+            invalid_count,
+        )
+
+    # Verify strictly increasing order for timed events
+    violations = 0
+    prev_ts = None
+    for event in valid_events:
+        if prev_ts is not None and event.timestamp < prev_ts:
+            violations += 1
+            log.warning(
+                "Chronological violation: [%s] %s/%s appears before previous timestamp %s",
+                event.iso_timestamp, event.app, event.event_type, prev_ts.isoformat(),
+            )
+        prev_ts = event.timestamp
+
+    if violations == 0:
+        log.info("Timeline validation PASSED: %d timed events in strict chronological order.", len(valid_events))
+    else:
+        log.warning("Timeline validation: %d chronological violation(s) detected.", violations)
+
     return timeline
 
 
